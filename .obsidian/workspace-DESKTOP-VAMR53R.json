@@ -1,0 +1,228 @@
+{
+  "main": {
+    "id": "2d1b1f7dbbf02f07",
+    "type": "split",
+    "children": [
+      {
+        "id": "29692a54a8bf315d",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "4c120b9c6112f3c0",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "wiki/skills-installed.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "skills-installed"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "fa8ba44a6f8754f5",
+    "type": "split",
+    "children": [
+      {
+        "id": "5d1035456ac39723",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "108dcba48f45cc87",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "240c6976c39a4917",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "86337e1f2d153538",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ],
+        "currentTab": 1
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "3962078158c4f219",
+    "type": "split",
+    "children": [
+      {
+        "id": "fc4f979ef18b2762",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "bd2657cc11296849",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "_COMMUNITY_Community 131.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for _COMMUNITY_Community 131"
+            }
+          },
+          {
+            "id": "571c3a439aae804a",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "_COMMUNITY_Community 131.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from _COMMUNITY_Community 131"
+            }
+          },
+          {
+            "id": "6034d9d87267c33e",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "e2d46fc01a906357",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "4eed8adc82cad326",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "_COMMUNITY_Community 131.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of _COMMUNITY_Community 131"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "4c120b9c6112f3c0",
+  "lastOpenFiles": [
+    "architect.md",
+    "wiki/games/_team.md",
+    "wiki/games/_team.md.tmp.1104.1777486594898",
+    "wiki/index.md.tmp.1104.1777486556377",
+    "wiki/todo/PaleGarden-todo.md",
+    "wiki/decisions/PaleGarden-decisions.md",
+    "wiki/chat-history/PaleGarden-chats.md",
+    "wiki/projects/PaleGarden.md",
+    "mechanics/garden-grid.md",
+    "mechanics",
+    "events/garden-recognizes-you.md",
+    "events",
+    "narrative/endings 1.md",
+    "narrative/endings.md",
+    "narrative",
+    "wiki/games/PaleGarden/narrative/whispers.md",
+    "wiki/games/PaleGarden/chat-history.md",
+    "wiki/games/PaleGarden/decisions.md",
+    "wiki/games/PaleGarden/narrative/storyline-graph.md",
+    "wiki/games/PaleGarden/narrative/endings/unmarked.md",
+    "wiki/games/PaleGarden/narrative/endings/consume.md",
+    "wiki/games/PaleGarden/narrative/endings/bloom.md",
+    "wiki/games/PaleGarden/narrative/endings/ash.md",
+    "wiki/skills-installed.md",
+    "wiki/projects.md",
+    "wiki/preferences.md",
+    "wiki/pending-updates.md",
+    "wiki/file-history.md",
+    "wiki/decisions.md",
+    "wiki/decisions/car-traffic-simulation-decisions.md",
+    "wiki/decisions/C-Labs-decisions.md",
+    "wiki/todo",
+    "wiki/decisions",
+    "scripts/vault_session_end.py",
+    "scripts/vault_pre_edit.py",
+    "Untitled 1.canvas",
+    "cache/65c1d6676be86670fd5f1a6e91357974b58277512ce83ee394e682e09be2c65a.json",
+    "Untitled.canvas"
+  ]
+}
