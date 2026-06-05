@@ -1,5 +1,44 @@
 # PaleGarden — Decisions
 
+## 2026-05-30 — Top-down depth: fixed building z + flip the PLAYER (not the building)
+
+**Why**: A whole building's single `z_index` cannot be simultaneously *above* a
+fence behind it and *below* a fence in front of it. The first attempt — flip each
+building's z `-1`/`+1` by the player's Y — fixed roofs but made a fence behind a
+building paint over its roof ("fence covers house"). So buildings are pinned at a
+**fixed** `Z_BUILDING (10)`, always above fences (`Z_FENCE 0`) → no fence-over-
+roof, ever; and instead the **player** flips to `Z_FRONT (11)` only while in
+front of a building (within its x-span and within `occlude_front_band` south of
+its base). Fences + player share the `z=0` Y-sort band so fences occlude the
+player per-tile. Net: roofs occlude, fences occlude, no fence-over-roof — without
+rebuilding the scene.
+**Alternatives considered & rejected**: (1) Building z-toggle — fence-over-roof
+bug. (2) Wrap each building in a base-anchored `Node2D` sorter so it Y-sorts at
+its base — **verified the sorters sat at the right Y but the legacy `TileMap`
+buildings still drew at their own node Y**; a non-Y-sorted Node2D didn't sort its
+legacy-TileMap subtree as a unit. Dead end *for legacy TileMaps*. (3) Full per-
+tile Y-sort everywhere — the correct end state, but blocked until **Magazie /
+Fence / Vegetation are converted from legacy `TileMap` to `TileMapLayer`**.
+**Known limitation**: the player-flip needs `occlude_front_band` tuned per scene
+— a fence sitting very close behind a building (the shallow barn yard) can fall
+inside the band and get floated over. The permanent fix is the TileMapLayer
+conversion. Full detail + the still-open south-fence bug:
+[[../games/PaleGarden/implementation/yard-depth-sorting]].
+**Affects**: `scenes/world/yard_loop.gd` (`_setup_building_occlusion`,
+`_register_occluder`, `_process`, `_enable_tile_ysort`), `scenes/world/yard_collisions.gd` (per-cell fence collider modes + roof-passable buildings).
+
+## 2026-05-29 — Yard day loop as a child-node coordinator (`yard_loop.gd`), not the root script
+
+**Why**: The `Yard` root already has `yard_tool.gd` (a `@tool` procedural map builder) attached — replacing it to host the day-loop wiring was off the table. The established pattern in this scene is already "one procedural coordinator per concern as a child Node2D": `Collisions`/`yard_collisions.gd` and `Zones`/`yard_zones.gd`. So the day loop is a third sibling, `YardLoop`/`yard_loop.gd`, building HUD + journal + day-transition + warm-overlay/tint + house rest zone procedurally in `_ready`. Net scene change: one node + one `attach_script` (done via Godot MCP so the editor stayed in sync). Keeps `yard.tscn` (~14k lines) un-hand-edited and the wiring regeneratable.
+**Alternatives considered**: Merge into `yard_tool.gd` (mixes a `@tool` map builder with runtime UI — bad separation, and `@tool` would try to run the UI in-editor). Author HUD/zones as `.tscn` nodes (hand-editing the giant scene; brittle to redesigns).
+**Affects**: `scenes/world/yard_loop.gd` (new), `/root/Yard/YardLoop` node. Exports `elias_path`, `house_walls_path`, `house_door_offset_tiles`. Reuses the `farm.gd` rest→`Journal`→`DayManager.advance_day`→`DayTransition` flow.
+
+## 2026-05-29 — House rest zone spans the full frontage, not the door
+
+**Why**: `House/HouseWalls` is a **solid rectangle** — the visible door is decorative art on a different layer, so there's no missing-cell "doorway" to detect (the code's bottom-up row gap-scan finds nothing and falls back to footprint centre). Centring a small zone on the geometric centre missed the off-centre door; the only way to hit the actual door would be a hardcoded "+4 tiles" offset — exactly the magic-number fragility the [[#2026-05-28 — Tight per-pixel collision via alpha bbox, not whole-tile rects|collisions decision]] avoided. So the rest zone covers the **whole house frontage** (footprint width × 3 tiles, one tile below the wall base), and the always-available HUD **Rest** button is the primary rest path. `house_door_offset_tiles` export remains for manual tuning, and the gap-scan still biases toward a real door if a future house has one.
+**Alternatives considered**: Hardcoded door offset (brittle per-house magic number). Detect the door from a separate art layer (which layer holds it is unknown/unstable). Door-interior transition scene (more scope than the loop needs; rest opens the diary in place for now).
+**Affects**: `yard_loop.gd::_build_house_door_zone()`, `HouseDoorZone` Area2D under `YardLoop`.
+
 ## 2026-05-28 — Yard collisions: procedural StaticBody2D, not TileSet physics layer
 
 **Why**: The yard's wall TileMapLayers (HouseWalls, BarnBody, Magazie, Fence…) don't have a `physics_layer` configured on their TileSets, and bulk-editing per-tile collision polygons via the embedded TileSet inside `yard.tscn` (~14k lines) is fragile and editor-bound. A `_ready`-time procedural generator that reads `get_used_cells()` and spawns `StaticBody2D` + `CollisionShape2D` rects per cell is one script, zero TileSet edits, easy to regenerate when walls are repainted.

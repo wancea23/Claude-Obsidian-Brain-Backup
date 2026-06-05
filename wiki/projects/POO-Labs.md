@@ -1,7 +1,7 @@
 # POO Labs — Object-Oriented Programming
 
 > University OOP lab series (LAB2 through LAB6)
-> **Last synced**: 2026-05-29 00:27
+> **Last synced**: 2026-06-05 21:42
 
 **Path**: `Code/POO Labs/`
 **Stack**: Java

@@ -4,6 +4,70 @@
 
 ---
 
+## 2026-06-04 — Relist identity must be gated on RARITY, not photo similarity; soft attributes are not vetoes
+
+**Decision** (design, not yet shipped — see [[../999-CarScrapper-relist-identity-rethink]]): the relist matcher is being redesigned around one law — **a value (photo hash, description, mileage, price) only proves identity if it is RARE across the whole dataset.** A pair is the same car iff it passes a make+model+year±1+fuel-group gate AND **either** shares a *rare* photo (global freq ≤ ~2–3) **or** shares common photos *plus* a *rare* exact mileage+price fingerprint. No transitive chaining (clique, not connected-components). ORB feature-matching is the planned verification layer for blurred-plate recall. Two earlier ideas are explicitly **abandoned**: (a) "≥1 exact 1:1 photo ⇒ relist" and (b) attribute *vetoes* on city/seller/price/mileage-drop.
+
+**Why**: the live pHash clustering (thr ≤10, ≥2 of first-8, make+model gate) has ~9–12 % wrong merges, dominated by **dealer-fleet chimeras**. Proven that 64-bit pHash collides for *different* cars shot in the same showroom: two different-mileage Peugeot 3008s share 3 byte-identical phashes, each shared by 8 cars — visually the same photo, different physical cars. So photo similarity is necessary but **not sufficient**. Separately, the user reclassified the **SM6** pair (Cimișlia/private/160k vs Chișinău/dealer/163k) as a **real** relist — the same car cross-posted in two cities — which proves city/seller/price/small-mileage differences are normal for relists and must **not** veto. The unifying thread (banners, dealer boilerplate, placeholder `mileage=1` on 2,873 listings, and showroom photos) is *a common value pretending to be identity* → rarity is the gate.
+
+**How to apply**: (1) Before any signal is allowed to assert "same car", ask *how many other listings share this exact value?* — if many, it carries zero identity (`mileage=1` ⇒ 1,163 cars; a showroom photo ⇒ 8 cars; an X-auto banner ⇒ thousands). (2) Never merge transitively; one shared template photo will otherwise chain a whole dealer fleet. (3) Treat soft attributes (location, seller_type, price, small mileage delta) as *non-vetoes* — relists cross cities and test prices. (4) Validate any threshold on **same-dealer/same-lot** hard negatives, not random pairs. (5) pHash is a cheap *candidate generator*; pixel/feature-level confirmation (ORB) is what actually decides "same photograph (minus a blurred plate)" vs "different car, same angle". Dry-run tool: `scripts/relist_v2.py`.
+
+---
+
+## 2026-06-02 — Relist pHash matching loosened (6→10 / first-3→8); fix history with a non-destructive merge, not a wipe
+
+**Decision**: relax the cluster matcher to `PHASH_HAMMING_THRESHOLD = 10` and `PHASH_MATCH_FIRST_N = 8` (`PHASH_REQUIRED_MATCHES` stays 2), and repair the historical backlog with a new `scripts/merge_relists.py` that only re-evaluates **singleton** clusters — NOT with `reset_clusters` + full rebuild.
+
+**Why**: a dealer's delete+repost of the same Hyundai Tucson was filed as two separate cars. Root cause: 999.md's CDN re-encodes a reposted photo, drifting its pHash ~10 bits (past the strict ≤6), and dealers reorder the gallery + put a shared promo banner in an early slot (excluded as a template), so the 3-photo window held too few real photos to reach 2 matches. Validated thr=10 on 741 distinct-car pairs → 0 false positives (thr=12 → 1 FP); the same-(make,model) candidate gate keeps the looser threshold safe. Chose a targeted merge over a wipe because the scheduler/refresher/web app run live (a wipe races concurrent re-assignment) and the ~15k already-correct multi-member clusters shouldn't be churned. Global run merged 2,748 relists, 0 new chimeras.
+
+**How to apply**: (1) Quantify the FP cost of any similarity-threshold loosening on real distinct-item pairs **before** committing to a value — don't eyeball it. (2) When the algorithm changes but data is live, prefer an idempotent, resumable, lock-tolerant *incremental* repair (revisit only the rows the old logic could have gotten wrong — here, singletons) over a destructive global rebuild. (3) Long-running daemons cache imported constants — **restart `scheduler_f.py` + `refresher_loop.py`** so new relists use the new params (the historical sweep is independent). Full write-up: [[../999-CarScrapper-relist-phash-tuning]].
+
+---
+
+## 2026-05-30 — Tick must survive throttle gracefully: gated per-listing timeout + circuit breaker
+
+**Decision**: the scheduler tick no longer freezes or stalls to its timeout under a new-listing burst. Three mechanisms in `pipeline.py` / `crawler.py` / `scheduler_f.py`:
+1. **Parallel discovery** (`_discover_parallel`, `config.DISCOVERY_CONCURRENCY = 6`) — full/tick sweep ~4 min → ~1 min. Shallow early-stop stays sequential.
+2. **Per-listing timeout behind a launch gate** (`config.PER_LISTING_TIMEOUT_S = 120`) — each worker is wrapped in `asyncio.wait_for`, but only after acquiring a `launch_gate` semaphore sized `2 × CONCURRENT_REQUESTS`. The gate is the load-bearing part: it makes the timeout measure *fetch* time, not time spent queued behind the site semaphore.
+3. **Circuit breaker** (`config.ABORT_AFTER_CONSEC_FAILURES = 40`) — abort the tick when 40 listings fail back-to-back (real throttle/ban) rather than hammering the ban or burning the whole timeout. Any success resets the streak.
+4. **Tick timeout 8 → 15 min** — burst headroom; `job_lock` already skips overlapping fires so there's no overlap risk.
+
+**Why**: a start-of-day burst (300–400+ new listings) used to either freeze the tick (a DNS lookup starved on asyncio's shared executor hangs a worker forever — httpx's timeout never starts) or, after my first fix, mass-timeout the queue and falsely report a ban. These changes make the tick **degrade gracefully**: process what it can, skip genuine stalls, back off cleanly from a real ban.
+
+**How to apply**: (1) When a timeout guards tasks whose concurrency is capped by a semaphore, acquire the gate **before** starting the timeout clock — otherwise `gather` launches every coroutine at once and the timeout becomes "time since the batch began", timing out the tail (see [[../mistakes#2026-05-30 — A per-task asyncio.wait_for timeout over a semaphore-gated gather]]). (2) Size the gate slightly above the fetch semaphore so detail-fetch and photo phases of different listings overlap — no throughput cost. (3) These are **resilience** layers, not a volume fix: the root throttle cause (combined concurrency 24 > ~16) is unchanged on purpose — the user requires the refresher to run continuously. If throttle becomes chronic, the lever is still the refresher (`fast=False`) or a one-time `--mode full` drain. See [[../999-CarScrapper-ratelimit-throttle-dns]].
+
+---
+
+## 2026-05-29 — Two-process split must share a concurrency budget ≤ ~16 (soft-throttle line)
+
+**Decision**: `scheduler_f.py` (site sem 12) and `refresher_loop.py` (site sem **3**) must keep their **combined** site concurrency under ~16. The refresher was dropped from sem 12 → 3, switched to `refresh_older_than_hours=24` + `fast=False` + 5-min pause. The scheduler tick stays at full discovery + verify-sold every 10 min.
+
+**Why**: the 2026-05-28 split created two processes hitting 999.md *simultaneously* at 12+12=24, past the documented soft-throttle threshold (`pipeline.py`: "p50 1s→13s at sem=24"). That caused 13s responses, `getaddrinfo` storms, and escalating temporary IP bans — the "scheduler doesn't work (5th try)" session. Concurrency is a **shared resource across processes**; tuning each in isolation to "12, the sweet spot" silently doubles the real load on the target. Full runbook: [[../999-CarScrapper-ratelimit-throttle-dns]].
+
+**How to apply**: when N processes hit the same rate-limited host, budget concurrency **globally**, not per-process. GraphQL discovery is cheap/tolerated (sequential, 1 reused conn); the scarce resource is detail-page GET concurrency. Reserve most of it for the latency-critical job (tick) and give the throughput job (refresher) the leftovers.
+
+---
+
+## 2026-05-29 — DNS (`getaddrinfo`) must not share the parse thread-pool; cap CDN concurrency
+
+**Decision**: fast mode now sets `CDN_CONCURRENT_REQUESTS = 16` (was 32) and `set_default_executor(ThreadPoolExecutor(max_workers=48))` (was 24).
+
+**Why**: `[Errno 11001] getaddrinfo failed` appeared under load. Two causes: (1) at CDN sem 32, throttle-induced connection drops triggered a reconnect storm → DNS lookup burst → Windows resolver returned spurious `WSAHOST_NOT_FOUND`; (2) `asyncio.getaddrinfo()` runs on the loop **default** executor, which fast mode had replaced with a 24-thread pool that parsing (`asyncio.to_thread`) also uses — so a backlog of concurrent parses starved DNS of threads. 48 workers + fewer CDN sockets gives both headroom.
+
+**How to apply**: on Windows/asyncio, never assume `to_thread`/parsing and DNS are independent — they share the default executor. Size it for both, or give parsing its own executor. Fewer concurrent sockets is the first lever for `getaddrinfo` failures.
+
+---
+
+## 2026-05-29 — `--mode full` is one-shot-with-backup; never loop it as the recurring job
+
+**Decision**: the recurring 10-min job stays the scheduler's `tick` mode. `pipeline.py --mode full` is reserved for one-time catch-ups (e.g. draining a new-listing backlog).
+
+**Why**: `--mode full` hot-backups the DB **before every run**; the backup pruner keeps 14. Looping `--mode full` every 10 min would cycle through all 14 backup slots in ~2h, destroying the daily-snapshot safety net that exists because of the earlier 235-row data-loss incident. `tick` mode deliberately omits the backup — that's the intended difference between the modes.
+
+**How to apply**: if a "do everything" command has an expensive side-effect gated to once-per-run (backup), don't put it on a high-frequency timer. Split the side-effect onto its own cadence (the scheduler does this implicitly via `tick` vs `full`).
+
+---
+
 ## 2026-05-28 — Discovery and refresh split into two processes
 
 **Decision**: `scheduler_f.py` is locked to **discovery + new-listing detection only** (tick every 10 min). All refresh work moved to a separate `refresher_loop.py` that runs `pipeline.run(mode="full", refresh_known=True)` continuously. The two processes coordinate only through SQLite WAL — no IPC, no shared locks beyond per-commit serialization.
@@ -618,6 +682,20 @@ The chosen formula has a clean ceiling at 100% (everything in the window sold), 
 3. **Full dedup mismatch** — the sell-through query initially used `_cluster_dedup_sql()` (cluster only) while Browse's model_stats used `_dedup_sql()` (relisting + cluster). Numbers diverged. Switched sell-through to match model_stats exactly. Active listings also get cluster-deduped via NOT EXISTS to match Browse's unique-car count.
 
 **How to apply**: when building a cross-cutting ranking that users will cross-reference with per-cohort stats on another page, use **identical dedup logic** and group only by dimensions that don't fragment below the minimum-sample threshold. Year buckets are stable (every listing has a year); generation text is not.
+
+---
+
+## 2026-05-30 — Year breakdown follows the status toggle; every dropdown count is deduped to unique cars
+
+**Decision**: Two changes that both enforce the same invariant — *counts shown next to the deduped grid must themselves be deduped, and must reflect what the user is browsing*:
+1. The model-stats side-card year breakdown is now **status-aware**. `model_stats` takes a `status` arg and emits `year_breakdown` + `year_breakdown_basis` (`active`/`removed`/`all`). Active basis keeps one newest-active-sibling row per `car_identity` cluster and `COUNT(*)`s per year (sums exactly to the Active headline); removed uses `_dedup_sql`; all sums both. `web/app.py` forwards `status` and includes it in the cache key. `app.js` relabels the section heading + chip tooltip per basis.
+2. Make/Model dropdown counts are **deduped** via new `web/app.py:_dedup_where(status)`, which mirrors `web/queries.build_listing_query`'s per-status cluster-dedup exactly. `list_models` and the `makes` facet use it.
+
+**Why**: The card headlined "508 ACTIVE" with year chips summing to ~67 because the chips were hardwired to the *sold* set, ignoring the Active/Removed/All toggle — two unrelated metrics sitting adjacent read as a bug. Separately the Make dropdown showed raw listing counts ("BMW 10231") next to a grid that shows unique cars (8,642) — same class of mismatch. Both are the recurring "unique cars vs raw listings" problem on this project.
+
+**Why one-representative-row-per-cluster, not `COUNT(DISTINCT cluster)`, for active-by-year**: a cluster whose relisted siblings carry mismatched model-year typos gets counted in two year buckets under `DISTINCT`, so the chips summed to 511 vs the 508 headline — re-creating the exact "which number is wrong" confusion. Picking the newest sibling per cluster and `COUNT(*)`-ing makes it sum exactly.
+
+**How to apply**: Never put a raw `COUNT(*)` next to the deduped grid. Use `_dedup_where(status)` (matches the grid) or the `analytics.py` helpers. When a count is "by year/by X", dedup to one representative row per cluster *before* grouping, don't `COUNT(DISTINCT cluster)` per bucket. Forward `status` explicitly into `model_stats` (it's stripped from `build_extra_filters`) and add it to the cache key. Full reference + every dedup variant: [[../999-CarScrapper-dedup-consistency]].
 
 ---
 

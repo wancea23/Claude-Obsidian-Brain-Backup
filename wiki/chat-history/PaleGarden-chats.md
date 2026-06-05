@@ -1,5 +1,67 @@
 # PaleGarden — Chat History
 
+## 2026-05-30 (later) — Re-attacked the south-fence occlusion bug; WRONG layer, still broken (parked)
+
+> Canonical writeup: [[../games/PaleGarden/implementation/yard-depth-sorting]] (see the "Update 2026-05-30 (later)" box). User said "still not fixed but forget about it, we'll fix it later" → parked.
+
+**What happened**: Fresh chat, "fix the fences." I did **not** read [[../games/PaleGarden/implementation/yard-depth-sorting]] first and burned the whole session re-deriving the already-documented bug (south fences don't occlude Elias). Two wrong tracks: (1) treated it as fence **geometry** — trimmed the barn-yard bottom-left stub (`x4,y23 (4,27)` removed; bottom rail now `x5–14`) and added/removed an experimental west edge; (2) then edited **`yard.tscn` directly** for depth.
+
+**Why it didn't work**: the depth system is **script-only** in `yard_loop.gd` (z-bands + player-flip, re-applied every `_ready`). My tscn edits — `y_sort_enabled=true` on `Yard` root / `Fence` / `BarnFence` (+ layers), `z_index=5` on `Vegetation`/`BarnBody`/`BarnRoof`/`BarnDoor` — are **redundant and overridden at runtime**, so nothing changed. The Godot MCP bridge also dropped repeatedly again (same blocker as the earlier session).
+
+**Current `yard.tscn` state (to reconcile next session)**: contains the above inert depth edits — **revert them** (depth belongs in `yard_loop.gd`). The only meaningful leftover is the trimmed bottom-rail stub (cosmetic; keep or restore). Pen's open west side (y21–22 below the house) is the intended entrance — leave open.
+
+**Real bug + fix unchanged**: still the legacy-`TileMap` `y_sort_origin` not taking effect (and/or OneDrive stale code). Real fix = convert `Magazie`/`Fence`/`Vegetation` to `TileMapLayer`s. See canonical page.
+
+**Lesson logged** in [[../mistakes]]: read the project vault (esp. `implementation/*`) before touching code; "draws on top of X" = Y-sort, not geometry; if a script owns depth, never edit the `.tscn`.
+
+## 2026-05-30 — Depth sorting / occlusion / fence+roof collision (PARTIAL — blocked, handoff)
+
+> Canonical writeup: [[../games/PaleGarden/implementation/yard-depth-sorting]] — read that first; it has the open-issue checklist. This is the chronological version.
+
+**Goal**: fix that the player drew *on top of* roofs, *in front of* fences he stood behind, got blocked by roof edges, etc. Top-down depth + collision polish on `yard.tscn`. All changes are runtime/script-only in `scenes/world/yard_loop.gd` (depth) + `scenes/world/yard_collisions.gd` (colliders) — `yard.tscn` untouched.
+
+**Landed & confirmed working** (user verified via screenshots):
+- **Roof occlusion on all buildings** (House/Barn/Magazie) — hidden behind the roof when north, draws over walls at the door.
+- **Vertical fences solid** — can't straddle/stand in them.
+- **Walk under the Magazie roof** — roof tiles no longer collide (only bottom 3 wall rows do): `roofed_building_paths`/`roof_building_wall_rows`.
+- **Most horizontal fences** occlude when Elias is north of them.
+
+**Final depth model** (after trying + abandoning two approaches — see the canonical page): Yard root `y_sort_enabled`; z-bands `Z_GROUND -100 < Z_FENCE/Z_PLAY 0 < Z_BUILDING 10 < Z_FRONT 11 < Z_TREES 20`. Buildings pinned at a FIXED z=10 (so a fence behind one never covers its roof — the old "fence covers house" bug); the **player** flips to z=11 only while in front of a building (within x-span and within `occlude_front_band=36` south of base). Fences get per-tile Y-sort with `y_sort_origin` pushed to their foot. Knobs on the `YardLoop` node: `occlude_front_band`, `occlude_x_pad`, `house_occlude_y_offset`. Fence collider is per-cell: vertical run = solid, horizontal run = thin foot strip (`MODE_SOLID`/`MODE_BASE` in `yard_collisions.gd`).
+
+**STILL BROKEN (open):** horizontal **south** fences — esp. the barn-yard bottom rail's **leftmost** tiles — don't occlude Elias (he draws over them). Likely cause is **stale code (OneDrive) and/or `set_layer_y_sort_origin` not taking on the legacy `Fence` TileMap**. Full diagnosis + 3 hypotheses + the real fix in the canonical page.
+
+**Two blockers that stopped me finishing:**
+- **Godot MCP died mid-session** — the user's **BLACKBOX** VS Code agent grabbed the godot-mcp connection; mine was terminated ("this server is no longer active") and wouldn't reconnect. Could not drive/screenshot to diagnose → forced into blind iteration (many rounds, frustrating).
+- **OneDrive** — Godot doesn't reliably hot-reload edits to files there, so reloads likely served **stale code**; several fixes may never have run.
+
+**Handoff plan** (agreed with user): user restarts VS Code/Claude in a brand-new chat. Next session should: copy project to `C:\Games\PaleGarden` (off OneDrive), ensure BLACKBOX isn't connected to Godot, confirm MCP with `get_state`, then drive Elias along the south fences and fix with verification. **Real fix that removes all tuning: convert legacy `TileMap`s (Magazie, Fence, Vegetation) to `TileMapLayer`s** so everything sorts per-tile at its base.
+
+**Files touched**: `scenes/world/yard_loop.gd`, `scenes/world/yard_collisions.gd`, `scenes/ui/hud.gd` (earlier `hide_tools()`), `scenes/world/yard_tool.gd` (earlier, neutered runtime rebuild).
+
+## 2026-05-29 — Closed the Act 1 yard day-loop (HUD + day/night tint + house rest zone)
+
+> Canonical writeup: [[../games/PaleGarden/implementation/phases/phase-2-days-1-3#Yard day loop — completed 2026-05-29]].
+> This is the chronological version.
+
+**Goal**: the new `yard.tscn` had no day loop — `DayManager`/`TimeManager` drove nothing, no HUD, no way to advance the day. Picked this over starting Act 2 because every Act 2 beat is day-gated (Days 15/20/22/25), so the day-advance is a hard prerequisite.
+
+**New file `scenes/world/yard_loop.gd`** attached to a new child node `/root/Yard/YardLoop` (Node2D). Deliberately a **child coordinator**, not the root script — the `Yard` root already runs `yard_tool.gd` (`@tool` map builder); clobbering it was not an option. Mirrors how `Collisions`/`yard_collisions.gd` and `Zones`/`yard_zones.gd` are sibling child coordinators. Builds everything procedurally at `_ready` so the 14k-line `yard.tscn` only changed by one node + script attachment (done via Godot MCP `node.create` + `attach_script` + `scene.save`).
+
+**What `yard_loop.gd` wires:**
+- **HUD** — instances `scenes/ui/HUD.tscn` (layer 10). Day/gold/stamina/hunger/inventory + Rest button. Connects `HUD.rest_pressed` → open journal.
+- **Day/night tint** — builds a screen-space `WarmRect` ColorRect (CanvasLayer layer 2) + a `time_of_day.gd` node wired to it. Driven by `TimeManager.phase_changed` → warm phase colors from `Constants.TIME_OF_DAY_COLORS`. Exposes `_tools_unlocked` + `_show_prompt` so `time_of_day.gd::_lock_for_night` works.
+- **House rest zone** — `Area2D` over the house frontage. `body_entered` (player) → `[E] Rest` prompt; `Elias.interact_pressed("house")` → open journal.
+- **Day advance** — `Journal.sleep_pressed` → `DayManager.advance_day()` → `DayTransition.play_transition()` → await finish. `_resting` guard prevents double-advance. Reuses the proven `farm.gd` flow.
+
+**House-zone saga** (see mistakes.md): assumed `House/HouseWalls` was the bottom-right cabin and centred the zone on the footprint. Debug readout (drew positions into the prompt label since MCP doesn't capture `print()`) revealed (a) the real House is **north, off the spawn screen** — the bottom-right cabin is a different building; (b) the door is **right-of-centre and purely decorative** — `HouseWalls` is a solid rectangle, so gap-detection (single row, then bottom-up multi-row) found nothing. Final call: **full-width frontage zone** dropped one tile below the wall base, rather than a brittle hardcoded door offset. `house_door_offset_tiles` `@export` left for tuning.
+
+**Verified**: HUD renders (Day 1/10g/5 stamina/inventory/Rest); warm tint applies; house zone fires (`in=true`); headless boot `--quit-after 3` exits 0 with **zero** errors from `yard_loop.gd` (only the pre-existing `yard_tool.gd` `Ground not found` warning).
+**Not visually confirmed**: the Day-2 transition screenshot — `E`/button clicks aren't injectable (no mouse support; `E` is a raw keycode) and the Godot MCP server got replaced mid-session. Logic is a direct `farm.gd` port; boots clean. Needs one manual rest-click to fully confirm.
+
+**Discovered, not fixed**: `yard_tool.gd` warns `Ground TileMapLayer not found` every boot — it targets node names `Ground`/`Structures`/`Objects` but the scene uses `Grass`/`Path`/`House`/etc. Legacy map-builder stale vs the hand-painted layout. Cleanup candidate.
+
+**Files touched**: `scenes/world/yard_loop.gd` (new), `scenes/world/yard.tscn` (+`YardLoop` node).
+
 ## 2026-05-28 — Yard.tscn Act 1 bootstrap: collisions, garden zone, crop rendering
 
 > Full structured writeup of this session lives at

@@ -6,6 +6,62 @@
 
 ## Sessions
 
+### [2026-06-04] Relist false-positives — pHash collides on showroom photos; whole identity model rethought
+
+**What was asked**: "let's think how we can solve the problem with relists on the 999 auto scrapper" → audit the live clustering, find the wrong merges, then design a better algorithm and dry-run it on 30k cars.
+
+**Audit**: sampled 1,000 multi-member clusters, montaged + eyeballed. Found systematic **dealer-fleet false merges** (Mercedes E-Class spanning years 2011/13/16, Tucson mixing 2 body generations, Ford Focus/Auris tied by "X auto"/"BROAUTO" banners). Data floor: 93/1,000 had a physically-impossible conflict (year-span ≥3 or mileage drop >30k) ⇒ ~1,500 definitely-wrong clusters. Gave the user a ranked list of the 100 worst; they confirmed.
+
+**Pivots driven by the user**:
+1. **SM6 reclassified as a REAL relist** — same car cross-posted in two cities. ⇒ killed my attribute-veto design (city/seller/price/small-mileage are NOT vetoes). See [[../mistakes#2026-06-04 — Built attribute *vetoes*]].
+2. The "ad" to strip is a **whole image that's just the dealer advert**, identical across all that dealer's listings → detect by recurrence.
+3. **Blurred-plate** cases: a real relist whose plate was blurred drifts the pHash and changes the description → "exact 1:1" misses it.
+4. A sub-agent confirmed **`mileage=1` is a placeholder** on 2,873 listings (`2025+1km` = 1,163 cars) — mileage can only corroborate, and only when rare.
+
+**The decisive finding** (via `scripts/relist_v2.py` on a 30k batch): the new "exact-photo" algo *still* built an 85-car Peugeot 3008 chimera. Root cause proven — two different-mileage 3008s share **3 byte-identical 64-bit pHashes** (each shared by 8 cars), photos visually identical (same AUTOPLAZA.MD showroom). **pHash measures composition, not identity.** See [[../mistakes#2026-06-04 — Trusted 64-bit pHash]].
+
+**Outcome**: derived a new model — gate (make+model+year±1+fuel) + **two-tier evidence** (rare-photo OR common-photo+rare-metadata) + **clique** (no transitive chaining) + **ORB** verify for blurred plates. Unifying law: *every signal must pass a rarity gate.* **Nothing shipped to live clustering** — `db/database.py` unchanged; an ID-search web feature was added then reverted by the user. Full write-up: [[../999-CarScrapper-relist-identity-rethink]].
+
+**Files**: `scripts/relist_v2.py` (new, read-only dry-run; outputs to `E:\DB\audit\relists_v2\`). `scripts/audit_relists.py` + `scripts/list_wrong_relists.py` were created then removed by the user. Vault: new deep-dive page + decisions + mistakes (×2) + todo.
+
+---
+
+### [2026-06-02] "These two cars are the same listing" — dealer relists missed by the pHash matcher
+
+**What was asked**: user screenshotted two grid cards of the same Hyundai Tucson 2022 (interauto.md), one removed 05-28, one removed 06-02, same price/photos — "find out what caused the error and fix it for all the other listings."
+
+**Diagnosis** (data-driven, not guessed): pulled both listings' photo phashes from the DB and computed cross-Hamming. The matching front-3/4 photo scored **10** bits (same image, CDN-re-encoded on repost); several other photos were exact 0s but sat at idx 6/12/18/19. The matcher used Hamming **≤6** over only the **first 3** photos — and slot 2 was the dealer's promo banner (correctly excluded as a template), leaving 2 re-encode-drifted photos that both blew past 6 → 0 matches → two singleton clusters (82494, 91250) instead of one.
+
+**Two root causes**: (1) threshold too strict for CDN re-encodes; (2) scan window too narrow once a template-banner + gallery reorder are in play.
+
+**Fix**: `db/database.py` — `PHASH_HAMMING_THRESHOLD 6→10`, `PHASH_MATCH_FIRST_N 3→8` (req stays 2). Validated thr choice on **741 distinct-car Tucson pairs**: thr=10 → 0 FP, thr=12 → 1 FP. Then wrote **`scripts/merge_relists.py`** (new) — non-destructive, resumable, lock-tolerant; revisits only singleton clusters and merges genuine relists via the live logic — chosen over `reset_clusters`+rebuild because the scheduler/refresher/web were live and 15k good clusters shouldn't be churned.
+
+**Verification**: backed up first (`listings-20260602-201523.db`). Tucson scoped apply: 61 merges (target pair unified, count=2, orphan deleted). Global apply: **2,748 merges**, and a backup-vs-current diff proved **0 new chimeras**, count-mismatches *down* (17,209→16,709), orphans/mismatches confirmed pre-existing (not introduced).
+
+**Flagged to user**: must **restart `scheduler_f.py` + `refresher_loop.py`** (they cache old constants); and a separate pre-existing cluster-bookkeeping debt (~5k orphans, ~16.7k stale counts) worth a future `reconcile_all_clusters` sweep.
+
+**Files**: `db/database.py` (constants + comments), `scripts/merge_relists.py` (new). Vault: [[../999-CarScrapper-relist-phash-tuning]] (deep-dive), [[../999-CarScrapper-dedup-consistency]] (params updated), decisions, todo.
+
+---
+
+### [2026-05-30] Scheduler "acting up again at 300 listings" — burst resilience + a self-inflicted timeout bug
+
+**What was asked**: "the scheduler is acting up again at only 300 listings, just fix it so it won't trouble if I run it at the start of the day and there'll be a bit too many listings once."
+
+**Misread #1 (mine)**: First diagnosed it as the documented 480s tick-timeout budget problem (sequential discovery eating ~4 min). I parallelised discovery + raised the timeout. Useful, but not the symptom the user saw.
+
+**The user corrected me**: the real symptom was `(0 photos)` on a handful of listings, then a ~5-min freeze, then "tick done". Re-reading: some `(0 photos)` are *correct* (`Cumpăr` buyer posts skip photos by design); the freeze is the throttle→ban→`getaddrinfo`-starvation cascade from the rate-limit runbook. To make the tick **survive** that without freezing, I added a per-listing `asyncio.wait_for` timeout + a consecutive-failure circuit breaker.
+
+**Then the breaker fired falsely** — and the log exposed a bug in *my own* timeout. 113 listings succeeded with photos (~1s each, 999.md totally fine), then **all 308 remaining timed out at the same instant** and tripped the breaker with a misleading "likely banned" message. Cause: `asyncio.gather` starts all 421 coroutines at once, so every `wait_for(120s)` clock started at T0, but only 12 can fetch (site semaphore). Listings queued deep burned their whole 120s *waiting in line*, never fetching → mass timeout at T0+120s. The timeout measured "time since the batch started", not "time since this listing started fetching". (Tell-tale: all 308 share one timestamp.)
+
+**Final fix**: a `launch_gate` semaphore (`2 × CONCURRENT_REQUESTS`) the worker must acquire **before** the timeout clock starts — so the clock measures fetch time, not queue time. Sized above the fetch sem so detail+photo phases overlap (no throughput loss). Reproduced the bug and confirmed the fix with a 60-task/sem-6 sim (no-gate: 12 of 60 wrongly timed out; gated: all 60 finish). User confirmed: "its working".
+
+**Behaviour after fix**: a 421-listing burst now drains fully in one tick (~40–50s processing at 12-wide) instead of stopping at 113. The 113 already inserted that run are safe (commit-per-listing); the 308 skipped reappear as `new` next tick. Root cause of the *throttling itself* (scheduler 12 + refresher 12 = 24, over the ~16 line) is unchanged and was left alone per the user's earlier "keep the refresher continuous" call — these changes make the tick degrade gracefully, not reduce volume.
+
+**Files changed**: `scraper/crawler.py` (`_discover_parallel` + `discover_all` dispatch), `config.py` (`DISCOVERY_CONCURRENCY`, `PER_LISTING_TIMEOUT_S`, `ABORT_AFTER_CONSEC_FAILURES`), `pipeline.py` (worker returns bool, `_bounded` + `launch_gate` + circuit breaker), `scheduler_f.py` (tick timeout 8→15 min). Vault: [[../mistakes#2026-05-30 — A per-task asyncio.wait_for timeout over a semaphore-gated gather]], [[../999-CarScrapper-ratelimit-throttle-dns]], todo.
+
+---
+
 ### [2026-05-28 later] Two follow-on bugs surfaced once both processes ran
 
 **Bug 1 — Refresher was inserting new listings too, racing the scheduler**.
@@ -512,6 +568,55 @@ Earlier attempt added `skip_discovery` / `skip_backup` flags to make the refresh
 **Files modified**: `web/static/style.css` (kpiSlideUp animation + overflow hidden), `web/static/app.js` (renderKpis auto-refresh + _kpiPrev tracking + hideOrdered state/binding/URL-sync), `web/static/index.html` (hideOrdered checkbox), `web/queries.py` (hideOrdered WHERE clause), `web/analytics.py` (hideOrdered in build_extra_filters).
 
 **Key decisions**: see decisions 2026-05-26 — KPI auto-refresh (poll interval vs cache TTL), "Hide ordered" uses structured fields not description parsing.
+
+---
+
+### [2026-05-29] "Scheduler doesn't work, 5th try" — it was 999.md rate-limiting, not a bug
+
+**What was asked**: the auto (999) scraper's scheduler kept failing across ~5 restarts. Logs showed discovery completing (1,144 pages, ~89k listings) then `GET https://999.md/ro/<id> failed after 3 attempts:` with an **empty** error. Later: "doesn't download photos and blocks after 2 listings", "still blocked, yesterday was fine", and a question on whether to just loop `pipeline.py --mode full` instead of the scheduler.
+
+**Diagnosis (all read-only — I changed no code during diagnosis; proven via `git status` = only README.md)**:
+- Empty `failed after 3 attempts:` = `httpx.ConnectTimeout('')`. `ping 999.md` replied (ICMP) but `Test-NetConnection :443` failed while google:443 succeeded ⇒ **temporary IP ban** (SYN dropped at edge), not a parser/scheduler bug.
+- The ban is **intermittent and rate-based**: a single fetch *and* a 12-concurrent burst from a fresh client both returned <0.5s, and the browser opened the site — so it's volume/behaviour, not a dumb firewall.
+- Root cause: the prior "Change Scrapper Logic" commit split into **two simultaneous processes** — `scheduler_f` (sem 12) + `refresher_loop` re-fetching all ~89k detail pages back-to-back (sem 12) = **24 combined**, past 999.md's documented soft-throttle line (~16 → responses 1s→13s) which escalated into bans.
+- "0 photos" on listings: parser is fine (fetched listing 78284806 clean → 20 photos, 82761751 → 10). The 0-photos were degraded pages served under throttle (listings logged 1s apart ⇒ photo download wasn't even attempted ⇒ empty photo_urls).
+- Later signature changed to `[Errno 11001] getaddrinfo failed` = **DNS exhaustion** under the reconnect storm + asyncio default-executor (DNS) being starved by the parse thread-pool that fast mode hijacked.
+- Tick `TIMEOUT after 480s` = a **backlog loop**: ~873 new listings piled up (DB 88,322 active vs ~89,039 feed); full discovery (~240s) + 873 new + verify can't fit in one tick → never drains.
+
+**What was changed** (after explicit user pick "all three fixes", then a correction):
+- `scheduler_f.py` — tick **restored to full discovery + verify-sold every 10 min** (user requires 10-min sold detection). My earlier shallow-discovery tick was reverted + the 6h sweep removed.
+- `pipeline.py` — fast mode `CDN 32→16`, default executor `24→48` (DNS no longer starves behind parsing); added `_touch_all()` batch-commit every 1,000 rows (fixes `database is locked`); inert `shallow=` param kept.
+- `scraper/crawler.py` — inert early-stop params on `discover_all`/`crawl_pages` (unused; `shallow=False` default).
+- `refresher_loop.py` — `refresh_older_than_hours=24`, site sem **3**, `fast=False`, pause 5 min.
+
+**Outcome / handed to user**: drain backlog once with `python pipeline.py --mode full` (uncapped, backs up DB), then run `scheduler_f.py` alone; add `refresher_loop.py` (sem 3) only after ticks confirm light. Photos fast again at combined concurrency 15.
+
+**Full runbook**: [[../999-CarScrapper-ratelimit-throttle-dns]].
+
+**Refresher tuning REVERTED (same session, later)**: the incremental `refresh_older_than_hours=24` + sem 3 + `fast=False` change worked *correctly* — on a freshly-synced DB it refreshed 0 (all <24h fresh) and finished a pass in ~1s. But the user read that idle behaviour as broken ("its fucking boken just revert it back") — they want the refresher *continuously* re-fetching every listing for drift, not a 24h gap between touches. `git checkout -- refresher_loop.py` (back to fast=True / sem 12 / all-known / 30s pause) and restored `pipeline.py`'s `skip_discovery` `_touch_all`. **Kept** the non-refresher fixes: scheduler tick = full discovery + verify-sold/10min, and the `cdn=16 / io-threads=48` DNS fix. Live risk re-introduced: scheduler(12)+refresher(12)=24 over the soft-throttle line; documented in the runbook with the `fast=False` middle ground if symptoms return. **Lesson: "refreshes 0 because nothing's stale" is correct but reads as broken to a user who expects constant activity — surface that framing up front, or keep visible progress.**
+
+---
+
+### [2026-05-30] "One of the numbers is wrong" — dedup consistency across the filtering engine
+
+**What was asked**: Two reports, both the same underlying class of bug — a deduped number next to a raw number:
+1. Browse side-card showed **508 ACTIVE** for BMW 5 Series PHEV but the year chips below summed to ~67. "Which one is wrong? Fix it for the entire search and filtering engine." Then clarified: the breakdown should be **status-aware** — active cars per year when viewing Active, removed per year when viewing Removed.
+2. Make dropdown showed **BMW (10231)** while the grid showed **8,642 listings**. "These should be unique listings only."
+
+**Diagnosis (read-only against live `E:\DB\listings.db` via `mode=ro&immutable=1` — scraper was writing, 806 MB WAL)**:
+1. **Nothing was miscalculated.** 508 active (641 raw → deduped) and 67 sold were both correct; the chips were a breakdown of the *sold* set (label literally "Sold by model year"), hardwired regardless of the Active/Removed/All toggle. Sell-through 12% = 67/(508+67) confirmed internal consistency. Root cause: `status` was **stripped** before `model_stats` (`app.py`), so the card never knew the toggle.
+2. Dropdown used raw `COUNT(*)`; the grid (`queries.py:90`) collapses each `car_identity` cluster to its newest sibling. Verified deduped BMW active = 8642, exactly the grid.
+
+**What was changed**:
+- **Status-aware year breakdown** — `model_stats(status=…)` now computes `year_breakdown` + `year_breakdown_basis` per the toggle: active = newest-active-sibling cluster dedup (`COUNT(*)` per year, sums **exactly** to the Active headline); removed = `_dedup_sql`; all = both summed. `app.py` forwards `status` + folds it into the cache key. `app.js` reads the new fields and relabels heading/tooltip (Active / Sold / Listings by model year).
+- **Deduped dropdown counts** — added `app.py:_dedup_where(status)` mirroring the grid's dedup exactly; `list_models` + the `makes` facet now use it. BMW 10231→8642, Mercedes 7887→6803, etc.
+- Avoided re-triggering the same confusion: a naive per-year `COUNT(DISTINCT cluster)` gave 511 vs 508 (year-typo clusters double-bucketed) — switched to one-representative-row-per-cluster so it sums exactly.
+
+**Files modified**: `web/analytics.py` (`model_stats` status param + `_active_year_rows`/`_removed_year_rows` + `year_breakdown`), `web/app.py` (`_dedup_where` helper, deduped makes/models, status forwarded to model_stats), `web/static/app.js` (year section uses `year_breakdown`/`_basis`). Verified both sum to headline (508 / 67); `py_compile` clean. Not committed; scraper still writing.
+
+**Pattern / lesson**: every count shown next to the deduped grid must use the *same* per-status cluster-dedup — see the canonical reference [[../999-CarScrapper-dedup-consistency]]. Also: "508 vs 67" wasn't a bug, it was two different metrics adjacent — when a user says "which is wrong", verify against the DB *first* and be willing to answer "neither, here's why" before changing code.
+
+**Decisions**: see decisions 2026-05-30. **Canonical dedup reference**: [[../999-CarScrapper-dedup-consistency]].
 
 ---
 

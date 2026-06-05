@@ -1,7 +1,7 @@
 # ASP Scrapper — ASP Exam Checker
 
 > DECA exam slot checker · Dark blue desktop GUI · Telegram notifications
-> **Last synced**: 2026-05-29 00:26
+> **Last synced**: 2026-06-05 21:42
 
 **Path**: `Code/ASP Scrapper/`
 **Stack**: Python, JSON, Markdown, Batch

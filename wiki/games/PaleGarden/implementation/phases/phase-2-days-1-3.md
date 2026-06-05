@@ -8,6 +8,28 @@
 
 ## Steps
 
+### Yard day loop — completed 2026-05-29
+
+**Read this if picking up cold.** The Act 1 day loop now exists on `yard.tscn`. New file **`scenes/world/yard_loop.gd`** attached to a new node **`/root/Yard/YardLoop`** (Node2D) — a sibling child coordinator alongside `Collisions`/`Zones`. It is **not** the root script: the `Yard` root keeps its `@tool` `yard_tool.gd` map builder. Everything is built procedurally in `yard_loop.gd::_ready`, so `yard.tscn` only gained one node + script attachment.
+
+**What `yard_loop.gd` builds (all procedural, no `.tscn` hand-editing):**
+- **HUD** — `_build_hud()` instances `scenes/ui/HUD.tscn`, forces `layer = 10`. `HUD.rest_pressed` → `_on_rest_requested()` (opens journal). HUD self-wires to GameState signals (day/gold/hunger/stamina/inventory) on its own `_ready`.
+- **Journal** — `_build_journal()` instances `scenes/ui/Journal.tscn` into a CanvasLayer host (`JournalCanvas`, layer 12). `Journal.sleep_pressed` → `_on_sleep_pressed()`.
+- **Day transition** — `_build_day_transition()` instances `scenes/ui/DayTransition.tscn` (`layer = 20`).
+- **Warm overlay + tint** — `_build_warm_overlay()` makes a `CanvasLayer` (layer 2) + full-rect `WarmRect` ColorRect + a `time_of_day.gd` node with `warm_rect`/`farm_ref` set. `time_of_day.gd` tweens `WarmRect.color` on `TimeManager.phase_changed` using `Constants.TIME_OF_DAY_COLORS`. `_ready` paints the current phase instantly. `yard_loop` exposes `_tools_unlocked: bool` + `_show_prompt()` so `time_of_day.gd::_lock_for_night` doesn't break.
+- **House rest zone** — `_build_house_door_zone()` reads `../House/HouseWalls` used cells, builds an `Area2D` (`HouseDoorZone`, mask 1) spanning the **full footprint width × 3 tiles tall**, centred one tile below the wall base. `body_entered`(player) → `[E] Rest` + `Elias.set_zone("house")`; exit hides prompt.
+- **Interact + day advance** — `Elias.interact_pressed` → `_on_interact(zone_id)`; `"house"` → `_on_rest_requested()` → `Journal.show_entry(day)`. Sleep button → `_on_sleep_pressed()`: `DayManager.advance_day()` → `DayTransition.play_transition(day)` → `await transition_finished`. `_resting` flag guards double-advance.
+
+**Key exports / knobs**: `elias_path = ^"../Elias"`, `house_walls_path = ^"../House/HouseWalls"`, `house_door_offset_tiles : Vector2` (nudge the rest zone if needed).
+
+**Why full-width zone, not a door-centred one**: `House/HouseWalls` is a **solid rectangle** — the visible door is decorative art on another layer, so there's no geometric door to detect (the bottom-up row gap-scan in the code no-ops and falls back to footprint centre). A hardcoded "+4 tiles to the door" offset would be the brittle magic number the collisions decision explicitly avoided, so the zone covers the whole frontage instead. The HUD Rest button is the always-available rest path regardless.
+
+**Also note**: the real `House` is **north of Elias's (320,180) spawn**, off the initial screen — the bottom-right cabin visible at spawn is a *different* building (Magazie/barn). Don't assume the first house you see is `House`.
+
+**Verification**: HUD/tint/zone confirmed live via Godot MCP (`in=true` when Elias reaches the frontage). `godot --headless --path . scenes/world/yard.tscn --quit-after 3` exits 0 with **no** `yard_loop.gd` errors. **Unconfirmed visually**: the Day-2 transition — `E`/UI clicks aren't MCP-injectable and the MCP server dropped mid-session; needs one manual rest-click. Logic is a direct `farm.gd` port.
+
+**Still NOT done on the day loop**: HUD tool buttons (Hoe/Water/Seed/Pick) are visible but unconnected on the yard (planting is via the garden overlay); `lock_tools()` isn't called. `yard_tool.gd` `Ground not found` warning is pre-existing legacy noise (targets stale node names).
+
 ### Yard redesign — completed 2026-05-28
 
 **Read this first if you're picking up from a new chat.** Mid-session the user switched the main scene from `scenes/Main.tscn` (procedural Farm built by `yard_tool.gd`) to `scenes/world/yard.tscn` (a hand-authored Yard with House, Magazie, BarnBody, BarnRoof, Fence, BarnFence, Garden, Vegetation tilemaps + Elias CharacterBody2D). The old Farm.tscn architecture is dormant; everything below targets the new Yard.
@@ -43,9 +65,9 @@
 - [ ] Real atlas mapping for `tomato`/`pumpkin` (user must point at Farm.png rows)
 - [ ] Tall crops (garlic row 13) — `tall=true` + `size_in_atlas (1,2)` in CROP_ATLAS
 - [ ] TileSet texture_origin fix for hand-painted Plants cells. Only row 9 cols 2-5 (cauliflower) currently has `texture_origin = (8,8)` in `TileSetAtlasSource_yrlxp` (source id 3 of `TileSet_lwiud` embedded in yard.tscn at line ~8529). Cabbage etc. painted by hand render in single tile. Need one-shot Python/sed pass adding `texture_origin = Vector2i(8, 8)` to crop atlas coords.
-- [ ] House door zone (Area2D on farmhouse door → [E] enters interior → bed advances DayManager). Currently no transition from yard to farmhouse.
-- [ ] HUD overlay on Yard (day/gold/stamina/hunger).
-- [ ] DayManager + TimeManager wiring — neither drives anything in the new Yard yet. SkyRect tint, day phase advancement, etc. unhooked.
+- [x] House door zone — **done 2026-05-29** (full-width frontage rest zone, not a door-interior transition). See [[#Yard day loop — completed 2026-05-29]].
+- [x] HUD overlay on Yard — **done 2026-05-29**.
+- [x] DayManager + TimeManager wiring — **done 2026-05-29** (WarmRect tint by phase; rest/sleep advances the day). Interior transition (yard → farmhouse) still not built — rest opens the diary in place, no separate interior scene.
 - [ ] Continue with `2.0`/`2.1` etc. below as adapted to the Yard.
 
 **Phantom error in editor logs** (ignore): `farmhouse.gd:89 TimeManager not declared`. Game runs fine; autoload is registered. `--script` flag bypasses autoloads, so `godot --headless --check-only --script <file>` will reproduce it. Stale editor parse cache.

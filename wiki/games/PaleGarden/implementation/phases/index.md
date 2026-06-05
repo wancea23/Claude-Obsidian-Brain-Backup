@@ -7,12 +7,23 @@ User-driven step-by-step build. I do nothing until you say "do step X.Y".
 > 4×4 grid) is logged at the top of [[phase-2-days-1-3#Yard redesign — completed 2026-05-28]].
 > Phase 1 ✅ marks still apply to the legacy `Farm.tscn` systems, but the Farm→Farmhouse
 > transition listed there is now obsolete (see Phase 1 "Post-redesign state").
+>
+> **2026-05-29**: Act 1 **day loop closed** on the Yard — HUD, day/night tint, house rest
+> zone, and rest→`DayManager.advance_day` are wired via new `scenes/world/yard_loop.gd`
+> (child node `/root/Yard/YardLoop`). See [[phase-2-days-1-3#Yard day loop — completed 2026-05-29]].
+> This unblocks the day-gated Act 2 events (Days 15/20/22/25).
+>
+> **2026-05-30**: Top-down **depth sorting / occlusion / fence+roof collision** —
+> roof occlusion, fence occlusion, walk-under-roof. Mostly done; one open bug
+> (south horizontal fences). Canonical subsystem doc: [[../yard-depth-sorting]].
+> **RESUME THERE** — it has the next-session checklist + blockers (MCP dead,
+> OneDrive stale code).
 
 | # | Phase | Status | Doc |
 |---|-------|--------|-----|
 | 0 | Reconciliation & Asset Prep | ✅ Done | [[phase-0-reconciliation]] |
 | 1 | Foundation Systems Upgrade | ✅ Done (Farm.tscn era) | [[phase-1-foundation]] |
-| 2 | Days 1-3 Foundation Experience | 🟡 In progress (Yard foundation done, Day 1 tutorial pending) | [[phase-2-days-1-3]] |
+| 2 | Days 1-3 Foundation Experience | 🟡 In progress (Yard foundation + day loop done; Day 1 tutorial pending) | [[phase-2-days-1-3]] |
 | 3 | Days 4-6 Bruno & Old Journal | ⏳ Pending | [[phase-3-days-4-6]] |
 | 4 | Day 7 Market & Margaret | ⏳ Pending | [[phase-4-day-7]] |
 | 5 | Days 8-11 Disruption | ⏳ Pending | [[phase-5-days-8-11]] |

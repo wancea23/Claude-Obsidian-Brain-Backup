@@ -511,3 +511,23 @@
 **Change type**: SOURCE CHANGE
 **Detail**: `app.py` was modified in ASP Scrapper — wiki Notes/Gotchas may need updating
 **Status**: pending
+
+### [2026-06-02 20:33] Python
+**Change type**: NEW SUBFOLDER
+**Detail**: New directory `LowBitrate Blur/` appeared in Python
+**Status**: pending
+
+### [2026-06-02 20:39] Python
+**Change type**: SOURCE CHANGE
+**Detail**: `LowBitrate Blur\lowbitrate.py` was modified in Python — wiki Notes/Gotchas may need updating
+**Status**: pending
+
+### [2026-06-04 00:21] 999 AutoPost
+**Change type**: SOURCE CHANGE
+**Detail**: `app.py` was modified in 999 AutoPost — wiki Notes/Gotchas may need updating
+**Status**: pending
+
+### [2026-06-05 20:09] Roblox
+**Change type**: NEW PROJECT
+**Detail**: Folder exists but no wiki page found at Roblox.md
+**Status**: pending

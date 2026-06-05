@@ -16,6 +16,9 @@
 | [[projects/Site\|Site]] | HTML/JS/CSS | Frontend marketplace website (buy/sell) |
 | [[projects/m99gadgets\|m99gadgets]] | Node.js + Python | Gadget e-commerce product listing site |
 | [[projects/Python\|Python]] | Python | Scripts, ML experiments, bots, university labs |
+| [[projects/LowBitrate-Blur\|LowBitrate Blur]] | Python + Pillow/numpy/scipy | CLI that degrades AI photos to look like real phone-camera shots (painted low-light look) |
+| [[projects/AI-Girl-Catalog\|AI Girl Catalog]] | AI image gen | Reference library — model refs, scene backgrounds (door variants), wardrobe/cosplays |
+| [[projects/AI-Cosplay-Model-Room\|AI Cosplay Model Room]] | AI image gen | Art-direction + cross-scene consistency notes for an AI cosplay-girl's bedroom set |
 | [[projects/C-Labs\|C Labs]] | C | University C programming labs (PC, SDA, NA) |
 | [[projects/Java-OOP\|Java OOP]] | Java | Phone charging simulation — OOP coursework |
 | [[projects/POO-Labs\|POO Labs]] | Java | OOP lab series (LAB2–LAB6) |
@@ -37,6 +40,12 @@
 | [[mistakes\|Mistakes]] | Past mistakes & lessons learned — read at session start |
 | [[file-history\|File History]] | Auto-backed up old code before edits (via PreToolUse hook) |
 | [[decisions\|Global Decisions]] | Cross-project patterns & rules (CSS bugs, Python idioms, etc.) |
+| [[999-CarScrapper-ratelimit-throttle-dns\|999 Scraper Rate-limit/Throttle/DNS Runbook]] | Diagnosing 999.md bans vs soft-throttle vs `getaddrinfo`; concurrency budget; backlog drain |
+| [[999-CarScrapper-dedup-consistency\|999 Scraper Dedup Consistency]] | Unique cars vs raw listings; every dedup variant (grid / model_stats / sell-through / facets / year-breakdown) + the golden rule for keeping counts in sync |
+| [[999-CarScrapper-relist-phash-tuning\|999 Scraper Relist pHash Tuning]] | Why dealer relists slipped past the matcher (CDN re-encode drift + narrow scan window); threshold 6→10 / first-N 3→8 tuning + FP validation; `merge_relists.py` non-destructive re-cluster tool |
+| [[999-CarScrapper-relist-identity-rethink\|999 Scraper Relist Identity Rethink]] | The opposite problem: the matcher's FALSE merges. pHash collides for different cars in the same dealer showroom (proven); SM6 is a real cross-post; the rarity law; new gate + two-tier + clique + ORB design. **→ SHIPPED, see next row.** |
+| [[999-CarScrapper-relist-v2-deploy\|999 Scraper Relist v2 — Shipped + Deploy]] | The shipped tier-A/S/B + clique model: chimeras 540→0; 3 precision fixes (self-defeating rarity, placeholder poisoning, generic-fingerprint); batch deploy (`apply_clusters`) + continuous `recluster_loop` + `lookup`; the deploy runbook. |
+| [[999-CarScrapper-web-perf-indexes\|999 Scraper Web UI Performance]] | Why the page loaded slow (grid 600 ms, listing 800 ms, facets/stats ~10 s) + the fixes: paginate-first query rewrite, missing history indexes, `offer_type`-covering facet indexes, grid-loads-first front-end reorder. Golden list of web-UI indexes. |
 | [[new-device-setup\|New Device Setup]] | Step-by-step: bring a fresh machine to the same Claude+vault state |
 | [[GRAPH_REPORT\|Graph Report]] | Auto-generated: communities, god nodes, connections |
 
