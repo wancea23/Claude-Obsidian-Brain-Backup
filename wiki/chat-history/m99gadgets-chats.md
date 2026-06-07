@@ -256,3 +256,24 @@ Focus on: decisions made, mistakes caught, patterns that worked.
 - Confirm Netlify is connected to `main` (not just `gh-pages`) so `netlify.toml` is read. `deploy.yml` still pushes to `gh-pages` — if Netlify watches `main` directly, the gh-pages step is leftover.
 - Once URLs indexed, watch Search Console → Performance → Queries for the keyword variants ("aula f75 m99", etc.).
 
+---
+
+### [2026-06-06] New ADPT category + sold-last sort + webp duplicate cleanup (and the photo-order fallout)
+
+**What was asked** (multi-part, across the session):
+1. Add a new **ADPT / Adaptor** category (first product: CarPlay Adapter, Excel row 148, `type=ADPT`).
+2. Make **sold-out products appear last** on the site.
+3. "transforms photos to webp but doesn't remove old formats → duplicate photos".
+4. (fallout) "order of some photos changed" + "hall of fame is broken".
+
+**What was changed**:
+- **ADPT category** wired end-to-end: `generate_products.py` `TYPE_INFO` (`ADPT`→"Adaptor"/🔌), `CAT_URL_SLUG` (`Adaptor`→`adapter`), `_CAT_RU` ("адаптер"); `static/js/app.js` `URL_SLUG_TO_TYPES`/`TYPE_TO_URL_SLUG` + `CAT_LABELS_RU` ("Адаптер"); `static/index.html` new `data-filter="ADPT"` chip. CarPlay Adapter live → canonical `/ro/adapter/carplay-adapter`, status on_the_way.
+- **Sold-last**: `app.js render()` — after sort/search ranking, a stable partition pushes `status==="out_of_stock"` to the bottom in every view (default, all sorts, search results).
+- **webp duplicates**: `generate_products.py` optimizer call now passes `--apply` (deletes originals after conversion). Deleted 176 leftover originals (~23 MB; 0 originals lacked a webp twin). 35 products had the same photo twice in their gallery → 0.
+- **Photo-order recovery** (the regression): see mistakes.md. Build now remaps a deleted original to its `.webp` twin **in the same position** (`existing_manual_images` loop), restored 31 scrambled products' order from `git show HEAD:products_manual.json`, regenerated.
+- **Hall of Fame fix**: `static/showcase/index.html` hardcoded `hof/*.png` (6 refs) — those originals were deleted in the dedupe, so 404. Switched all 6 to `.webp` (twins present).
+
+**Pattern / lesson**: deleting "duplicate" source files is only safe if nothing references them *by exact name*. Two things did: (a) curated photo order in `products_manual.json` (early photos as `.png`, later as `.webp`) and (b) the hand-written showcase page. Both broke silently. Always grep for hardcoded references to a file before deleting it, and when an ordered list is keyed by filename, mutate it position-preserving — never drop-and-reappend.
+
+**Outcome**: all verified against regenerated `products.json` (0 non-webp refs, 0 gallery dups, order matches git for every committed product) and live on the local server (port 8099). Not committed — working-tree only. `products_manual.json` is now the all-webp source of truth.
+

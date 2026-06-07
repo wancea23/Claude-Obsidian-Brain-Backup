@@ -168,6 +168,7 @@
 - [x] Detail-modal price/mileage history → Chart.js time-series with visible points (`chartjs-adapter-date-fns`) — 2026-05-23
 - [x] Themed scrollbars via `var(--border-strong)` + slim 8px variant for modal/filter/thumb-strip — 2026-05-23
 - [x] Sell-through tile in model-stats card (`truly_sold / (active + truly_sold)`) with tiered display + info tooltip — 2026-05-23
+- [x] **scheduler_f tick timeout 8min → 6h** so a big new-listing backlog finishes in one tick instead of dripping ~110/fire (reentrance lock already prevents overlap; intermediate fires skip) — 2026-06-06 ⚠️ **restart `scheduler_f.py` daemon to apply**
 
 ## Next on the cluster-aware path
 - [ ] **Daily NBM EUR/MDL + USD/MDL rate ingest** — per the user's note, the merged price history mixes currencies (EUR / MDL / USD) and the chart must keep the ORIGINAL currency each point was spotted in. Need a `fx_rates` table keyed by `date` with `eur_mdl` + `usd_mdl` columns, populated nightly from NBM (`https://www.bnm.md/`). At chart time, convert each point's native currency → display currency using the rate from that point's `recorded_at` date. Don't store converted values — store native + look up rate at render time. Affects: scraper (capture original currency per `price_history` row — already in schema), backend (`get_listing` resolver), frontend (chart Y-axis formatter).

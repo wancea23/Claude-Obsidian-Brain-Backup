@@ -699,4 +699,11 @@ The chosen formula has a clean ceiling at 100% (everything in the window sold), 
 
 ---
 
+## 2026-06-06 — scheduler_f tick timeout sized to worst-case backlog (8min → 6h), not to the tick interval
+**Decision**: `scheduler_f.py` `JOB_TIMEOUT_SEC["tick"]` raised from `8*60` to `6*60*60`. The old comment "8 min — must finish before next tick fires" no longer holds as a hard constraint.
+**Why**: The tick does GraphQL discovery + detail-fetch of new IDs + verify-sold. On a busy day (1200+ new listings) detail-fetch can't finish in 8 min, so the tick was killed after ~110 cars and the backlog dripped out ~110 per 10-min fire — hours to clear. The "must finish before the next tick" rule was over-cautious: the run loop is single-threaded and guarded by a file reentrance lock (`job_lock`), so a tick that overruns the 10-min interval simply causes the intermediate `schedule` fires to be **skipped** (the lock yields `False`), with no overlap and no pileup. The normal cadence resumes once the backlog clears.
+**How to apply**: When a scheduled job is already protected against concurrent runs (reentrance lock / single-threaded loop), its per-run timeout should bound only genuine **hangs**, not normal long runs — size it to worst-case work, not to the schedule interval. Keep it bounded (6h, not `None`) so a stuck job still dies and the daemon recovers. Tradeoff: the hourly `wal_checkpoint` is `schedule`d on the same loop, so a long blocking tick defers it until the tick returns (WAL can grow meanwhile); acceptable, it catches up immediately after. **Editing `scheduler_f.py` requires restarting the running daemon.**
+
+---
+
 [[../projects/999-CarScrapper|← Back to 999 CarScrapper wiki]] · [[../decisions|← Global Decisions]]

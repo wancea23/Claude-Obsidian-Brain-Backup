@@ -5,7 +5,12 @@
 > img2img / IP-adapter / inpaint anchors to keep generations consistent.
 > **Started**: 2026-06-02
 
-**See also**: [[AI-Cosplay-Model-Room|Room art-direction & consistency notes]] · [[LowBitrate-Blur|LowBitrate Blur realism filter]]
+**See also**: [[AI-Girl-Pipeline|Generation pipeline & LoRA training]] · [[AI-Cosplay-Model-Room|Room art-direction & consistency notes]] · [[LowBitrate-Blur|LowBitrate Blur realism filter]]
+
+> **Update 2026-06-06**: she's now generated locally via ComfyUI (Z-Image Turbo / Moody) — see
+> [[AI-Girl-Pipeline]]. A character-LoRA dataset is in progress (`Code/AI-Girl/PROMPTS-easy.txt` +
+> `datafolder/`, 17/36 done). Canonical identity refined to: V-shaped chin, large **hazel** eyes,
+> high cheekbones, full pink lips.
 
 **Working library (canonical)**: `Code/AI-Girl/` — full-res originals you add to & organize:
 `model/`, `scenes/door/`, `clothes/`, `renders/` (finished posts).

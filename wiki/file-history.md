@@ -247,3 +247,115 @@ Run:
      "ON listings(status, COALESCE(price_eur, price_usd, price_mdl/19.0))"),
 ]
 ```
+
+### [2026-06-05 23:04] 999 CarScrapper\recluster_loop.py
+**Change**: (fill in — what changed and why)
+**Old value**:
+```python
+def _run(step: list[str]) -> bool:
+    """Run `python -m <step>` from the project root; log its last lines."""
+    r = subprocess.run([sys.executable, "-m", *step], cwd=str(PROJECT_ROOT),
+                       capture_output=True, text=True, timeout=STEP_TIMEOUT_SEC)
+    for line in (r.stdout or "").strip().splitlines()[-3:]:
+        logger.info("  " + line)
+    if r.returncode != 0:
+        logger.error(f"step `{' '.join(step)}` failed (rc={r.returncode}): {(r.stderr or '')[-600:]}")
+        return False
+    return True
+
+
+def one_pass() -> None:
+    if not _run(["scripts.relist_v2", "--reset-log", "--montage", "0"]):
+        return
+    if not _run(["scripts.apply_clusters", "--apply", "--no-backup"]):
+        return
+    logger.info("pass: new clusters deployed to car_identity")
+```
+
+### [2026-06-06 01:00] 999 CarScrapper\scripts\relist_v2.py
+**Change**: (fill in — what changed and why)
+**Old value**:
+```python
+    ap.add_argument("--overlap-frac", type=float, default=0.6,
+                    help="...or shared photos >= this fraction of the smaller gallery (covers small galleries).")
+```
+
+### [2026-06-06 01:04] 999 CarScrapper\recluster_loop.py
+**Change**: (fill in — what changed and why)
+**Old value**:
+```python
+    compute = _run(["scripts.relist_v2", "--reset-log", "--montage", "0"])
+```
+
+### [2026-06-06 17:06] m99gadgets\generate_products.py
+**Change**: (fill in — what changed and why)
+**Old value**:
+```python
+    "Wearable":          "wearable",
+    "Accesoriu":         "accessory",
+}
+```
+
+### [2026-06-06 17:07] m99gadgets\static\js\app.js
+**Change**: (fill in — what changed and why)
+**Old value**:
+```javascript
+      "wearable":          ["W"],
+      "accessory":         ["COV"],
+    };
+    const TYPE_TO_URL_SLUG = {
+      "K": "keyboard", "KHE": "keyboard", "M": "mouse",
+      "H": "headphones", "GH": "gaming-headphones",
+      "EH": "earphones", "MIC": "microphone", "J": "controller",
+      "PWR": "powerbank", "W": "wearable", "COV": "accessory",
+    };
+```
+
+### [2026-06-06 17:08] m99gadgets\static\index.html
+**Change**: (fill in — what changed and why)
+**Old value**:
+```html
+      <button class="fb" data-filter="PWR" onclick="setFilter(this)">đź”‹ Powerbank</button>
+      <button class="fb sep" disabled>â”‚</button>
+```
+
+### [2026-06-06 17:54] m99gadgets\generate_products.py
+**Change**: (fill in — what changed and why)
+**Old value**:
+```python
+    result = subprocess.run(
+        [sys.executable, optimizer, "--convert", "--quiet"],
+        capture_output=True, text=True
+    )
+```
+
+### [2026-06-06 17:57] 999 CarScrapper\scheduler_f.py
+**Change**: (fill in — what changed and why)
+**Old value**:
+```python
+TICK_EVERY_MIN = 10
+WAL_CHECKPOINT_EVERY_MIN = 60
+JOB_TIMEOUT_SEC = {
+    "tick": 8 * 60,                 # 8 min â€” must finish before next tick fires
+}
+```
+
+### [2026-06-06 18:03] m99gadgets\generate_products.py
+**Change**: (fill in — what changed and why)
+**Old value**:
+```python
+        # keep any images explicitly listed in the manual file that actually exist
+        existing_manual_images = [img for img in manual.get("images", [])
+                                  if os.path.isfile(os.path.join(IMAGES_DIR, img))]
+```
+
+### [2026-06-07 16:56] gen_lora.py
+**Change**: (fill in — what changed and why)
+**Old value**:
+```python
+HOST = "http://127.0.0.1:8188"
+OUTDIR = r"C:\Users\johns\ComfyUI-Shared\output"
+
+ap = argparse.ArgumentParser()
+ap.add_argument("prompt")
+```

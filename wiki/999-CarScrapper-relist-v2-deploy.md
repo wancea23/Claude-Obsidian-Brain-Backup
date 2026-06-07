@@ -67,9 +67,53 @@ Verify / inspect:
 - **changed** `db/schema.sql` (+`relist_decision_log` table), `web/static/app.js` + `index.html` (search-by-id incl. deleted)
 - **unchanged** `db/database.py` ingest matcher (provisional only; the loop is authoritative)
 
+## Verifying the loop is alive (2026-06-05) — the `0 clusters` red herring
+
+User saw `recluster_loop` print `montage pages (0 clusters): 0` on *every* pass and asked "you sure it's working?". **It was working** — the log line is cosmetic noise:
+
+- The loop runs `relist_v2 --montage 0`, so the **montage summary** (`relist_v2.py:749`, the last `print` in the file) is *correctly* zero. The real counts are at `relist_v2.py:658` (`CLIQUE clusters: N`) and `:687` (`logged N decisions`).
+- The old loop only echoed **the last 3 stdout lines** (`splitlines()[-3:]`) → it always showed the montage line and hid the real counts.
+- `apply_clusters` reports its rebuild via **loguru → stderr**, which the loop printed **only on failure** → `rebuilt N clusters` was never visible on a successful pass.
+
+**Proof it was live** (queried `E:\DB\listings.db` directly): `relist_decision_log` latest run `20260605T224751` (= that pass's `22:47:51`) had **52,338 decisions**; `car_identity` held **16,480** multi-member clusters covering **34,699** listings, ids contiguous `1…16480` (= full wipe+rebuild ran that pass). To check liveness fast: match the newest `relist_decision_log.run_id` timestamp to a recent pass, and confirm `car_identity` id range is contiguous from 1.
+
+**Fix** (`recluster_loop.py`, logging-only — no behavior change): `_run` now returns the `CompletedProcess`; `one_pass` greps `relist_v2` **stdout** for `CLIQUE clusters:` + `logged ` and `apply_clusters` **stderr** for `rebuilt ` → each pass now logs `compute: CLIQUE clusters: …` + `pass deployed: rebuilt N clusters …`. Restart the daemon to pick it up; the running instance keeps clustering correctly, just logs the old line until restarted.
+
+**Lesson**: when a daemon "looks dead" from its log, the log line may just be the wrong signal — verify against the DB/state before touching code (same instinct as the [[999-CarScrapper-dedup-consistency|"508 vs 67"]] non-bug). loguru defaults to stderr, so subprocess wrappers that only print stdout will silently swallow it.
+
+## Tier H — high-overlap merge (SHIPPED 2026-06-06)
+
+**Trigger**: user saw 12 identical `Nissan Primera 2002` listings (one dealer relisting one car: 290 km, €2250, same silver Primera, 9/10 shared photos) showing as separate cards — only 2 were clustered, 10 were singletons. The decision log showed **all three tiers defeated by self-defeating rarity at scale** (this is deploy bug #1, but a 12× relist instead of 5×):
+
+| Tier | Cap | These listings | Why it failed |
+|------|-----|----------------|---------------|
+| A rare photo | freq ≤ 2 (`--rare-cap`) | rarest shared photo freq **11–13** | dealer reused photos across 12 listings |
+| S single-car | dispersion ≤ 1 (`--photo-car-cap`) | dispersion **2** | photos also appear under a 2nd fingerprint globally |
+| B fingerprint | freq ≤ 8 (`--meta-rarity-cap`) | fp `(2002,290,2250)` freq **12** | the relist run inflated its own fingerprint past the cap |
+
+The **90% gallery overlap** that obviously identifies them was only a *gate* on S/B (`overlap_ok`), never a merge signal on its own.
+
+**Fix** (`scripts/relist_v2.py`): added **tier H** — `is_H = args.high_overlap and overlap_ok`, i.e. merge when shared photos ≥ `--overlap-min` (5) OR ≥ `--overlap-frac` (60%) of the smaller gallery, **regardless of rarity/fingerprint**. Flag `--high-overlap`, **default OFF** (ad-hoc runs stay precision-first); `recluster_loop.py` passes it explicitly. Also added a `CHIMERA METRICS` stdout line (year-span≥3 / multi-fuel clusters / largest cluster) as the validation signal for any model change.
+
+**Validation (full-DB, `--no-log` baseline vs `--high-overlap`)**:
+
+| | baseline | tier H |
+|---|---|---|
+| listings clustered | 34,692 | **36,882** (+2,190) |
+| clusters | 16,473 | 16,263 (split relists rejoined) |
+| year-span≥3 chimeras | 0 | **0** |
+| multi-fuel chimeras | 0 | **0** |
+| largest cluster | 26 | **26** (no runaway fusion) |
+
+**Why it's safe**: the C-Class chimera (deploy bug #3) had cross-car overlap of only **2–4** photos — below the ≥5 threshold by construction, so tier H *cannot* recreate it; the AD-strip gate still strips reused dealer graphics underneath. Caveat: the chimera metrics are coarse (won't catch same-year/same-fuel look-alikes) — the real guarantee is the threshold + ad-strip, not the metric.
+
+**Deployed**: run `20260606T010429`, `apply_clusters --apply` rebuilt 16,263 clusters / 36,882 listings (1,287 brand-new clusters, 5,856 listings re-grouped). The 12 Primeras → cluster **973** (11 listings) + **972** (the 2 that share only 2 photos with the rest — clique model correctly won't transitively chain them).
+
+**GOTCHA — restart the daemon after a model change**: `recluster_loop.py` runs `relist_v2`/`apply_clusters` as subprocesses, but the *running* daemon holds the old `recluster_loop.py` in memory. After editing its invocation (e.g. adding `--high-overlap`) you MUST Ctrl-C + restart it, or its next pass recomputes with the old flags and **overwrites `car_identity`, silently reverting the deploy**. (Editing `relist_v2.py`/`apply_clusters.py` alone *is* picked up live, since they're re-spawned each pass — only changes to `recluster_loop.py` itself need a restart.)
+
 ## Open / not shipped
 
-- **High-overlap path** — a price/mileage-change relist (e.g. `104366816`: same car, €2300 vs €2550, 9/10 identical photos) stays SEPARATE under the strict model (no rare photo, fingerprint differs). A "≥5 shared photos → merge regardless of price/mileage" path would recover these; deferred (precision-first). Lives in `relist_v2`; `recluster_loop` would pick it up automatically.
+- ~~**High-overlap path**~~ — **SHIPPED 2026-06-06 as tier H** (see section below).
 - **New-model cluster in the web detail** — the detail panel still renders the live `car_identity` cluster (now correct post-deploy); surfacing the per-pair *reasons* in the UI is optional.
 - **ORB/AKAZE feature-verify** (blurred-plate recall, reject same-angle look-alikes) — still future.
 

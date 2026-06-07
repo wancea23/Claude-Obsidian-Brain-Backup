@@ -294,6 +294,26 @@
 
 ---
 
+## m99gadgets — deleting "duplicate" image originals scrambled photo order + 404'd the showcase (2026-06-06)
+- **Mistake**: To kill webp duplicates I deleted 176 jpg/png originals that all had `.webp` twins. Two things referenced those files **by exact name**: (1) `products_manual.json` encoded each product's curated photo order with the ORIGINAL extension for early photos (`name.png`) and `.webp` for later ones; the build's `existing_manual_images` filter dropped the now-missing `.png` entries, and `os.listdir()` re-appended their webp twins at the end in arbitrary order → main photo landed mid-gallery for 31 products. (2) `static/showcase/index.html` (Hall of Fame) hardcoded `hof/*.png` (6 refs) → broken images on the live page.
+- **Fix**: build now remaps a missing original to its `.webp` twin **in the same position**; restored the 31 scrambled orders from `git show HEAD:static/data/products_manual.json` (map names → webp); switched the 6 showcase refs to `.webp`. Verified 0 non-webp refs / 0 gallery dups / order matches git.
+- **Prevention**: before deleting any file, **grep the repo for hardcoded references to its exact name** (HTML/JS/JSON manifests, not just the generator). When an ordered list is keyed by filename, mutate it position-preserving — never drop-and-reappend, and never let `os.listdir()` order define a user-facing sequence. Store ordered manifests with the canonical (post-conversion) extension so a later cleanup can't invalidate them.
+
+---
+
+## AI-Girl — Python 3.13 venv for ai-toolkit = wheel hell (2026-06-07)
+- **Mistake**: Built the ai-toolkit training venv on the system **Python 3.13**. Two installs failed mid-way:
+  `scipy==1.12.0` (no cp313 wheel → tried to compile, no Fortran compiler), then `numpy` (pulled <2.1 via
+  librosa→numba, no cp313 wheel → source build → `ld` errors). Burned a full torch download (2.8 GB) twice.
+- **Fix**: Rebuilt the venv on **Python 3.12** (`py -3.12 -m venv venv`) — cp312 wheels exist for the whole
+  stack. Also bumped `scipy==1.12.0`→`>=1.14.1`. Install then went clean.
+- **Prevention**: For ML training stacks (kohya, ai-toolkit, diffusers-from-git), **use the README's
+  recommended Python (here 3.12), not the newest installed**. Bleeding-edge 3.13/3.14 routinely lacks wheels
+  for scipy/numpy/numba/bitsandbytes → silent source builds that fail on Windows without a compiler. Check
+  `py -0p` for an older interpreter before creating the venv. See [[ai-girl-lora-training-local|Training Runbook]].
+
+---
+
 ## How to Use
 - Before starting a task on a project, check this file for known pitfalls
 - After a mistake is identified, add it here immediately

@@ -1,7 +1,7 @@
 # Roblox Scripts
 
 > Luau scripts for a Roblox game (forest theme)
-> **Last synced**: 2026-06-05 21:42
+> **Last synced**: 2026-06-07 18:48
 
 **Path**: `Code/Roblox/`
 **Stack**: Luau

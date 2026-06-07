@@ -620,6 +620,42 @@ Earlier attempt added `skip_discovery` / `skip_backup` flags to make the refresh
 
 ---
 
+### [2026-06-05] "YOU SURE ITS WORKING" — recluster_loop liveness + logging fix
+
+**What was asked**: User pasted `recluster_loop.py` output showing `montage pages (0 clusters): 0` on every pass (#1–#3) and challenged whether the daemon was actually doing anything.
+
+**Diagnosis**: It *was* working — the `0 clusters` line is a red herring. The loop runs `relist_v2 --montage 0`, so the montage summary (the file's last `print`, `relist_v2.py:749`) is correctly zero; the real counts (`CLIQUE clusters:` `:658`, `logged N decisions` `:687`) were truncated because the old `_run` only echoed `stdout` last-3-lines, and `apply_clusters`' rebuild summary goes to **loguru→stderr** which the loop printed only on failure. Proven live against `E:\DB\listings.db`: decision-log run `20260605T224751` (= pass #3's `22:47:51`) had 52,338 decisions; `car_identity` = 16,480 clusters / 34,699 listings, ids contiguous 1…16480 (full wipe+rebuild confirmed).
+
+**What was changed**: `recluster_loop.py` only (logging, no behavior change) — `_run` returns the `CompletedProcess`; added `_grep_line`; `one_pass` now surfaces `CLIQUE clusters:` + `logged ` from stdout and `rebuilt ` from `apply_clusters` stderr. `py_compile`/ast-parse clean, needles verified against source. Daemon needs a restart to pick it up.
+
+**Pattern / lesson**: a daemon that "looks dead" in its log may just be logging the wrong signal — verify against DB/state before editing code. loguru defaults to **stderr**; subprocess wrappers that capture only stdout silently swallow it. Full writeup appended to [[../999-CarScrapper-relist-v2-deploy]].
+
+---
+
+### [2026-06-06] "why aren't the primeras shown as relisted?" — tier H (high-overlap merge) shipped
+
+**What was asked**: User screenshot showed 12 identical `Nissan Primera 2002` cards (290 km, €2250, same silver car) not deduped.
+
+**Diagnosis** (decision log + DB): one dealer relisting one car 12×. Only 2 clustered, 10 singletons. All three merge tiers defeated by **self-defeating rarity at scale** — the 12× relist pushed shared-photo freq to 11–13 (>A cap 2), photo dispersion to 2 (>S cap 1), and fingerprint freq to 12 (>B cap 8). The 90% gallery overlap was only a gate, never a merge signal — exactly the deferred "high-overlap path" in [[../999-CarScrapper-relist-v2-deploy]].
+
+**What was changed**: added **tier H** to `scripts/relist_v2.py` (`--high-overlap`, default OFF; merge on ≥5 shared OR ≥60% gallery overlap alone) + a `CHIMERA METRICS` validation line; `recluster_loop.py` now passes `--high-overlap`. Validated full-DB: **+2,190 listings recovered, 0 new year-span≥3 / multi-fuel chimeras, largest cluster unchanged at 26**. Deployed (run `20260606T010429`): Primeras → cluster 973 (11) + 972 (2). User must **restart `recluster_loop.py`** to pick up the daemon flag change (otherwise next pass reverts it).
+
+**Pattern / lesson**: (1) heavily-relisted cars defeat *every* rarity cap — gallery overlap must be a first-class merge tier, not just a gate. (2) **Editing `recluster_loop.py` requires restarting the running daemon**; editing the subprocess scripts it spawns (`relist_v2`/`apply_clusters`) does not. (3) Validate global model changes with chimera deltas (year-span/fuel/largest) before deploying — but those metrics are coarse; the real safety is the ≥5 threshold sitting above bug #3's 2–4 cross-car overlap. Full writeup: [[../999-CarScrapper-relist-v2-deploy]] (tier H section).
+
+---
+
+### [2026-06-06] scheduler_f tick timeout 8min → 6h so a big new-listing backlog finishes in one tick
+
+**What was asked**: "make the scheduler's tick not expire until it has [discovered/detail-fetched] all the cars — it only does ~110 per tick before the tick timeout, but today there were 1200 and it took ages waiting for the timeout." (User clarified the process is `scheduler_f.py` and "renew" = the tick finding/detailing new listings.)
+
+**Diagnosis**: `scheduler_f.py` `JOB_TIMEOUT_SEC["tick"] = 8*60`. The tick (GraphQL discovery + detail-fetch of new IDs + verify-sold) was killed after 8 min having processed ~110 cars; the remaining backlog dripped out ~110 per 10-min fire → hours to clear 1200.
+
+**What was changed**: raised `JOB_TIMEOUT_SEC["tick"]` to `6*60*60` (6h). Safe because the run loop is single-threaded with a file reentrance lock — a long tick just makes the intermediate 10-min `schedule` fires skip (no overlap, no pileup), and the normal cadence resumes once the backlog clears. 6h (not `None`) still kills a genuinely hung job. At the observed ~110/8min rate, 1200 cars finish in ~90 min, well under the cap. Syntax-checked; **daemon needs a restart** to pick it up.
+
+**Pattern / lesson**: a fixed per-job timeout that's shorter than the worst-case backlog turns a scheduler into a slow drip. If a reentrance lock already prevents overlap, the per-tick timeout only needs to bound *hangs*, not *normal long runs* — size it to worst-case work, not to the tick interval. Minor tradeoff noted: during a long blocking tick the hourly WAL checkpoint is deferred until it finishes (WAL can grow), catches up right after.
+
+---
+
 ## How to use
 After finishing a session on this project, summarize it here.
 Focus on: decisions made, mistakes caught, patterns that worked.

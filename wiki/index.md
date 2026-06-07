@@ -18,6 +18,8 @@
 | [[projects/Python\|Python]] | Python | Scripts, ML experiments, bots, university labs |
 | [[projects/LowBitrate-Blur\|LowBitrate Blur]] | Python + Pillow/numpy/scipy | CLI that degrades AI photos to look like real phone-camera shots (painted low-light look) |
 | [[projects/AI-Girl-Catalog\|AI Girl Catalog]] | AI image gen | Reference library — model refs, scene backgrounds (door variants), wardrobe/cosplays |
+| [[projects/AI-Girl-Pipeline\|AI Girl Pipeline]] | ComfyUI + Z-Image Turbo + ReActor | Local gen pipeline (Moody/ZIT) + face-swap + character-LoRA dataset effort |
+| [[ai-girl-lora-training-local\|AI Girl — Local LoRA Training Runbook]] | ai-toolkit + Z-Image | Recipe that trained `a1g1rl` LoRA locally on 8 GB (py3.12, float8+offload, 2500 steps) |
 | [[projects/AI-Cosplay-Model-Room\|AI Cosplay Model Room]] | AI image gen | Art-direction + cross-scene consistency notes for an AI cosplay-girl's bedroom set |
 | [[projects/C-Labs\|C Labs]] | C | University C programming labs (PC, SDA, NA) |
 | [[projects/Java-OOP\|Java OOP]] | Java | Phone charging simulation — OOP coursework |
@@ -69,6 +71,7 @@
 | Roblox | [[decisions/Roblox-decisions\|decisions]] |
 | Car Traffic Simulation | [[decisions/car-traffic-simulation-decisions\|decisions]] |
 | PaleGarden | [[decisions/PaleGarden-decisions\|decisions]] |
+| AI Girl | [[decisions/AI-Girl-decisions\|decisions]] |
 
 ---
 
@@ -90,6 +93,7 @@
 | Roblox | [[todo/Roblox-todo\|todo]] |
 | Car Traffic Simulation | [[todo/car-traffic-simulation-todo\|todo]] |
 | PaleGarden | [[todo/PaleGarden-todo\|todo]] |
+| AI Girl | [[todo/AI-Girl-todo\|todo]] |
 
 ---
 
@@ -111,6 +115,7 @@
 | Roblox | [[chat-history/Roblox-chats\|chats]] |
 | Car Traffic Simulation | [[chat-history/car-traffic-simulation-chats\|chats]] |
 | PaleGarden | [[chat-history/PaleGarden-chats\|chats]] |
+| AI Girl | [[chat-history/AI-Girl-chats\|chats]] |
 
 ---
 

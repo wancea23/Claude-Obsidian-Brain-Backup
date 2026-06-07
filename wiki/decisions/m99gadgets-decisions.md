@@ -149,4 +149,16 @@
 
 ---
 
+### [2026-06-06] Image optimizer now deletes originals (`--apply`) + build remaps original→webp position-preserving
+**Decision**: `generate_products.py`'s auto-run of `scripts/optimize_images.py` now passes `--convert --apply --quiet` (was `--convert --quiet`), so jpg/png originals are deleted right after the `.webp` is produced. Separately, `build()`'s image collection resolves each manual-listed image to its on-disk form **preserving position**: if `name.jpg` is gone but `name.webp` exists, it substitutes the webp in the same slot instead of dropping it. A dedupe-by-basename (prefer webp) is the final safety net.
+**Why**: Without `--apply`, both `name.jpg` and `name.webp` sat on disk and the `disk_images` scan listed BOTH in a product's gallery (35 products showed the same photo twice) plus bloated the repo by ~23 MB. But deleting originals exposed a second bug: the curated photo order in `products_manual.json` encoded early photos with their original extension (`.png`) and later ones as `.webp`; the old `existing_manual_images` filter simply dropped the now-missing `.png` entries, and `os.listdir()` re-appended their webp twins at the END in arbitrary order — scrambling the main photo to the middle of 31 galleries.
+**How to apply**: Never list a photo by a deletable extension in an ordered manifest — store the canonical (`.webp`) name. If originals must be purged, do it position-preserving. To recover a scrambled order, `git show HEAD:static/data/products_manual.json` holds the curated sequence; map each name to its `.webp` twin and rewrite. Products deliberately reordered all-webp (e.g. white keyboard `_5` first) are NOT scrambled by this bug and must be left untouched.
+
+### [2026-06-06] Sold-out products always sort last; new ADPT/Adaptor category
+**Decision**: In `app.js render()`, after the chosen sort and search ranking, a stable partition moves `status==="out_of_stock"` rows to the bottom of every view. New product category **ADPT** ("Adaptor", 🔌, URL slug `adapter`, RU "Адаптер") registered in `generate_products.py` (`TYPE_INFO`/`CAT_URL_SLUG`/`_CAT_RU`), `app.js` (`URL_SLUG_TO_TYPES`/`TYPE_TO_URL_SLUG`/`CAT_LABELS_RU`), and an `index.html` filter chip.
+**Why**: User wanted sold inventory out of the way without hiding it; "sold" = the `out_of_stock` status (EPUIZAT), not `on_the_way`. ADPT is a genuinely new category line (CarPlay adapters) that needed a slug + bilingual labels to flow through routing, SEO, and the filter bar.
+**How to apply**: Adding a category = the same three files (build mappings, JS routing/labels, HTML chip). The `on_the_way` items stay in normal position — only `out_of_stock` sinks. Keep the partition stable so it preserves the relative order computed by the active sort.
+
+---
+
 [[../projects/m99gadgets|← Back to m99gadgets wiki]] · [[../decisions|← Global Decisions]]

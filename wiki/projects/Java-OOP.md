@@ -1,7 +1,7 @@
 # Java — Phone Charging Simulation
 
 > OOP simulation of a phone charging system
-> **Last synced**: 2026-06-05 21:42
+> **Last synced**: 2026-06-07 18:48
 
 **Path**: `Code/Java/`
 **Stack**: Java, Markdown
